@@ -1,0 +1,16 @@
+{
+    "editor.codeActionsOnSave": {
+        "source.addMissingImports": true,
+        "source.fixAll.eslint": true,
+        "source.organizeImports": true,
+    },
+    "editor.formatOnSave": true,
+    "[javascript]": {
+        "editor.autoIndent": "keep"
+    },
+    "[yaml]": {
+        "editor.autoIndent": "advanced"
+    },
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "editor.tabSize": 2,
+}
