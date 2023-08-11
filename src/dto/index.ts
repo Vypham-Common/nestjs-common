@@ -1,1 +1,2 @@
-export * from './queryOptions.dto'
+export * from './query-options.dto'
+
