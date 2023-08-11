@@ -8,11 +8,17 @@ declare module 'express' {
     isAuthorization: boolean
   }
 }
+
+const envConfig = {
+  JWT_SECRET: process.env.JWT_SECRET || '',
+  HOST_URL: process.env.HOST_URL || '',
+  PUBLIC_KEY: process.env.PUBLIC_KEY || '',
+  MONGODB_NAME: process.env.MONGODB_NAME || '',
+}
+
 declare global {
   var GlobalConfig: {
-    JWT_SECRET: string
-    HOST_URL: string
-    PUBLIC_KEY: string
+    [k in keyof typeof envConfig]: string
   }
   export interface JWTPayload {
     _id: Types.ObjectId
@@ -100,8 +106,4 @@ declare global {
     limit: null | number
   }
 }
-global.GlobalConfig = {
-  JWT_SECRET: process.env.JWT_SECRET || '',
-  HOST_URL: process.env.HOST_URL || '',
-  PUBLIC_KEY: process.env.PUBLIC_KEY || '',
-}
+global.GlobalConfig = envConfig
