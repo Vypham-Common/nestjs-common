@@ -52,14 +52,12 @@ export abstract class AbstractService<
   populate: PopulateOptions[] = []
   lookup: PipelineStage[] = []
   shortLookup: GeneratePipeline<M['Doc']>[] = []
-  getCollectionName: M['getCollectionName']
   constructor(
     M: M,
     user: JWTPayload | undefined = undefined,
     { shortLookup, populate }: AbstractServiceOptions<M['Doc']> = {}
   ) {
     this.name = M.name
-    this.getCollectionName = M.getCollectionName.bind(M)
     this.tenant = M.tenant
 
     if (user) {
@@ -70,44 +68,23 @@ export abstract class AbstractService<
       this.lookup = this.generateLookup(this.shortLookup)
     }
     if (populate) {
-      this.populate = this.generatePopulate(populate)
+      this.populate = populate
     }
 
     this.model = M.model
   }
 
-  generatePopulate(
-    populate: (PopulateOptions & { global?: boolean })[]
-  ): PopulateOptions[] {
-    return populate.map(({ global, ...o }) => {
-      if (
-        o.model &&
-        typeof o.model === 'string' &&
-        !global &&
-        !o.model.includes(this.tenant as string)
-      ) {
-        o.model = this.getCollectionName(o.model)
-      }
-      if (o.populate) {
-        o.populate = this.generatePopulate(o.populate as PopulateOptions[])
-      }
-      return {
-        ...o,
-      }
-    })
-  }
-  generateLookup(pipelines: GeneratePipeline[], prefix = '') {
+  generateLookup(pipelines: GeneratePipeline[]) {
     const mappedPipeline: Exclude<
       PipelineStage,
       PipelineStage.Merge | PipelineStage.Out
     >[] = []
     pipelines.forEach((pipeline) => {
       const { unwind = true, keepNull = false, project } = pipeline
-      const localField = `${prefix}${String(pipeline.localField)}`
-      const as = `${prefix}${String(pipeline.as || pipeline.localField)}`
-      const from = pipeline.global
-        ? pipeline.from
-        : this.getCollectionName(pipeline.from)
+      const localField = `${String(pipeline.localField)}`
+      const as = `${String(pipeline.as || pipeline.localField)}`
+      const from = pipeline.from
+
       const lookupStage: PipelineStage.Lookup = {
         $lookup: {
           from: from,

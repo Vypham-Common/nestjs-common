@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { SchemaFactory } from '@nestjs/mongoose'
 import { Connection, Model, Schema, Types, VirtualTypeOptions } from 'mongoose'
+import { getDbName } from '../utils'
 
 interface VirtualPopulate {
   name: string
@@ -9,7 +10,7 @@ interface VirtualPopulate {
 interface AbstractModelConstructor<D> {
   hooks?: (model: AbstractModel<D>) => void
   staticHook?: (model: AbstractModel<D>) => void
-  virtualsPopulate?: VirtualPopulate[]
+  virtualPopulate?: VirtualPopulate[]
 }
 @Injectable()
 export abstract class AbstractModel<D> {
@@ -24,11 +25,11 @@ export abstract class AbstractModel<D> {
     name: string,
     decoratorSchema: new () => D,
     tenant: string | undefined = undefined,
-    { hooks, staticHook, virtualsPopulate }: AbstractModelConstructor<D> = {}
+    { hooks, staticHook, virtualPopulate }: AbstractModelConstructor<D> = {}
   ) {
-    this.connection = connection
     this.name = name
     this.tenant = tenant
+    this.connection = connection.useDb(getDbName(this.tenant))
 
     this.schema = SchemaFactory.createForClass(decoratorSchema)
     if (staticHook) {
@@ -38,33 +39,22 @@ export abstract class AbstractModel<D> {
     if (hooks) {
       hooks(this)
     }
-    if (virtualsPopulate) {
-      this.generateVirtualPopulate(virtualsPopulate)
+    if (virtualPopulate) {
+      this.generateVirtualPopulate(virtualPopulate)
     }
-
     this.model = this.getModel()
   }
 
-  generateVirtualPopulate(virtualsPopulate: VirtualPopulate[]) {
-    virtualsPopulate.forEach(({ name, option }) => {
-      if (option.ref && typeof option.ref === 'string') {
-        option.ref = this.getCollectionName(option.ref)
-      }
+  generateVirtualPopulate(virtualPopulate: VirtualPopulate[]) {
+    virtualPopulate.forEach(({ name, option }) => {
       this.schema.virtual(name, option)
     })
   }
-  getCollectionName(name?: string) {
-    if (name) {
-      return `${this.tenant ? this.tenant + '_' : ''}${name}`
-    }
-    return `${this.tenant ? this.tenant + '_' : ''}${this.name}`
-  }
 
   getModel() {
-    const collectionName = this.getCollectionName()
-    let modelObject = this.connection.models[collectionName]
+    let modelObject = this.connection.models[this.name]
     if (!modelObject) {
-      modelObject = this.connection.model<D>(collectionName, this.schema)
+      modelObject = this.connection.model<D>(this.name, this.schema)
     }
     return modelObject
   }
