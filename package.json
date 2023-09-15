@@ -6,7 +6,7 @@
   "scripts": {
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "build": "npm run lint && nest build",
-    "prepare": "npm run build"
+    "postinstall": "npm run build"
   },
   "dependencies": {
     "@json2csv/plainjs": "^7.0.1",
