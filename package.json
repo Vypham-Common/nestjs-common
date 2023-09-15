@@ -5,8 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "build": "npm run lint && nest build",
-    "postinstall": "npm run build"
+    "build": "npm run lint && nest build"
   },
   "dependencies": {
     "@json2csv/plainjs": "^7.0.1",

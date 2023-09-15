@@ -2,7 +2,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
   UnauthorizedException,
-} from "@nestjs/common"
+} from '@nestjs/common'
 import axios, { AxiosRequestConfig } from 'axios'
 import { Agent } from 'https'
 const { HOST_URL } = GlobalConfig
