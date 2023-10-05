@@ -1,5 +1,5 @@
 {
-  "name": "nestjs-common",
+  "name": "@vypham0209/nestjs-common",
   "version": "1.0.0",
   "description": "To make it easy for you to get started with GitLab, here's a list of recommended next steps.",
   "main": "dist/index.js",
@@ -15,6 +15,7 @@
     "@nestjs/mongoose": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^7.1.6",
+    "@vypham0209/nestjs-common": "^1.0.0",
     "axios": "^1.4.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
@@ -39,5 +40,6 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "types": "./dist/index.d.ts"
 }
