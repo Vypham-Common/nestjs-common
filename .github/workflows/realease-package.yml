@@ -3,7 +3,6 @@ name: Node.js Package
 on:
   release:
     types: [created]
-
 jobs:
   publish-gpr:
     runs-on: self-hosted
