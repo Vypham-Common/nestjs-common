@@ -38,6 +38,9 @@
     "tsconfig-paths": "4.2.0",
     "typescript": "^5.0.0"
   },
+  "publishConfig": {
+    "@vypham0209:registry": "https://npm.pkg.github.com"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
