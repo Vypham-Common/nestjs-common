@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common'
 import { REQUEST } from '@nestjs/core'
 import { Request } from 'express'
 import { TOKEN } from '../../enums'
+import { WorkerModule } from '../worker/worker.module'
 
 const provideUser = {
   provide: TOKEN.USER,
@@ -15,13 +16,14 @@ const provideTenant = {
   provide: TOKEN.TENANT,
   inject: [REQUEST],
   useFactory(request: Request) {
-    return request?.user?.employee?.tenant
+    return request?.tenant
   },
 }
 
 @Global()
 @Module({
+  imports: [WorkerModule],
   providers: [provideUser, provideTenant],
-  exports: [provideUser, provideTenant],
+  exports: [provideUser, provideTenant, WorkerModule],
 })
-export class GlobalModule {}
+export class GlobalModule { }

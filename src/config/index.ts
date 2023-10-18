@@ -1,11 +1,11 @@
 import { Document, Expression, FilterQuery, PipelineStage, Types } from 'mongoose'
 
-
 declare module 'express' {
   export interface Request {
     tenant: string
     user: JWTPayload
     isAuthorization: boolean
+    jwt: string
   }
 }
 
@@ -22,26 +22,7 @@ declare global {
   }
   export interface JWTPayload {
     _id: Types.ObjectId
-    id: Types.ObjectId
-    signInRole: string[]
-    email: string
-    employee: {
-      _id: Types.ObjectId
-      tenant: string
-      location: Types.ObjectId
-      company: Types.ObjectId
-      department: Types.ObjectId
-      manager: Types.ObjectId
-      generalInfo: {
-        workEmail: string
-        legalName: string
-        [k: string]: any
-      }
-      id?: string
-      [k: string]: any
-    }
-    jwt: string
-    [k: string]: any
+    tenant: string
   }
   interface NestedObjectSelect {
     [k: string]: number | NestedObjectSelect
@@ -82,9 +63,10 @@ declare global {
     : `${TKey}`
   }[keyof TObj & (string | number)]
 
+
   type GeneratePipeline<T = any> = {
     from: string
-    localField: RecursiveKeyOf<T>
+    localField: RecursiveKeyOf<T> | RecursiveKeyOf<T>[]
     foreignField?: string
     as?: string
     lookup?: GeneratePipeline[]
@@ -98,6 +80,10 @@ declare global {
     project?: NestedObjectSelect,
     keepNull?: boolean
     global?: boolean
+    let?: PipelineStage.Lookup['$lookup']['let'],
+    sort?: Record<string, 1 | -1 | Expression.Meta>,
+    skip?: number,
+    limit?: number
   }
 
   type GeneratePipelineWithOptions<T = any> = (query?: FilterQuery<any>, select?: NestedObjectSelect) => GeneratePipeline<T>
