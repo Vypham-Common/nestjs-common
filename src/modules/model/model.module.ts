@@ -1,8 +1,9 @@
 import { BadRequestException, DynamicModule, InternalServerErrorException, Module } from '@nestjs/common'
-import { REQUEST } from '@nestjs/core'
 import { SchemaFactory, getConnectionToken } from '@nestjs/mongoose'
-import { Request } from 'express'
 import { ClientSession, Connection, FilterQuery, HydratedDocument, MergeType, Model, PipelineStage, PopulateOptions, ProjectionType, QueryOptions, Schema, Types, UpdateQuery } from 'mongoose'
+import { AbstractSchema } from '../../abstracts/AbstractSchema'
+import { TOKEN } from '../../enums'
+import { getDbName } from '../../utils'
 import { eventEmitter } from '../../utils/eventEmitter'
 
 type OptionalQueryOption = {
@@ -18,6 +19,7 @@ type OptionalQueryOption = {
   }[]
   populate?: PopulateOptions[] | false
   projection?: ProjectionType<any>
+  softDelete?: boolean
 }
 
 type Group = {
@@ -30,7 +32,7 @@ type Group = {
   }[]
 }
 
-const factoryMethod = function <D extends {} & { _id: Types.ObjectId }, PullPopulate extends {} = object>(Model: Model<D>) {
+const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {} = object>(Model: Model<D, {}, ModelMethod>) {
   function find(
     input: {
       query?: FilterQuery<D>
@@ -80,7 +82,9 @@ const factoryMethod = function <D extends {} & { _id: Types.ObjectId }, PullPopu
     populate,
     idsOnly,
     projection,
+    softDelete = true,
   }: MergeType<{ query?: FilterQuery<D> }, OptionalQueryOption>) {
+    const isSoftDelete = Model.isSoftDelete()
     const options: QueryOptions = {}
     if (skip) {
       options.skip = skip
@@ -634,7 +638,6 @@ const factoryMethod = function <D extends {} & { _id: Types.ObjectId }, PullPopu
     return promise
   }
 
-  // incase we need the chain to create or update in many collection
   async function transaction<T = any>(callback: (session: ClientSession) => Promise<T>) {
     const session = await this.M.connection.startSession()
     try {
@@ -651,7 +654,7 @@ const factoryMethod = function <D extends {} & { _id: Types.ObjectId }, PullPopu
   }
 
   return {
-    Model,
+    model: Model,
     generatePopulate(
       populate: (PopulateOptions & { global?: boolean })[]
     ): PopulateOptions[] {
@@ -807,29 +810,46 @@ const factoryMethod = function <D extends {} & { _id: Types.ObjectId }, PullPopu
   }
 }
 
-export type Method<D> = ReturnType<typeof factoryMethod<D & { _id: Types.ObjectId }>>
+export type Method<D extends AbstractSchema> = ReturnType<typeof factoryMethod<D >>
+
+export type ModelFactory<D extends AbstractSchema> = (tenant: string) => Model<D>
+export type MethodFactory<D extends AbstractSchema> = (tenant: string) => Method<D>
+
 @Module({})
 export class ModelModule {
-  static register<D = any>(Decorator: new () => D, collectionName: string | undefined = undefined, hook?: (schema: Schema<D>) => void): DynamicModule {
+  private static registerSchema<D = any>(Decorator: new () => D, hook?: (schema: Schema<D>) => void) {
     const Schema = SchemaFactory.createForClass(Decorator)
     if (hook) {
       hook(Schema)
     }
+    return Schema
+  }
 
+  private static createModelFactory<D = any>(name: string, Schema: Schema<D>) {
+    return function (connection: Connection, tenant?: string) {
+      return connection
+        .useDb(getDbName(tenant))
+        .model(name, Schema)
+    }
+  }
+
+  private static getName(Decorator: (new () => any) & { collectionName?: string }) {
+    return Decorator.collectionName || Decorator.name
+  }
+
+  static register<D = any>(Decorator: (new () => any) & { collectionName?: string }, hook?: (schema: Schema<D>) => void): DynamicModule {
+    const Schema = this.registerSchema(Decorator, hook)
+    const name = this.getName(Decorator)
     const providers = [
       {
-        provide: `MODEL_${collectionName || Decorator.name}`,
-        useFactory(connection: Connection, req: Request) {
-          return connection
-            .useDb(req.tenant)
-            .model(collectionName || Decorator.name, Schema)
-        },
-        inject: [getConnectionToken(), REQUEST],
+        provide: `MODEL_${name}`,
+        useFactory: this.createModelFactory(name, Schema),
+        inject: [getConnectionToken(), TOKEN.TENANT],
       },
       {
-        provide: `METHOD_${collectionName || Decorator.name}`,
+        provide: `METHOD_${name}`,
         useFactory: factoryMethod,
-        inject: [`MODEL_${collectionName || Decorator.name}`],
+        inject: [`MODEL_${name}`],
       }
     ]
     return {
@@ -839,30 +859,28 @@ export class ModelModule {
     }
   }
 
-  static registerWithoutRequest<D = any>(Decorator: new () => D, collectionName: string | undefined = undefined, hook?: (schema: Schema<D>) => void): DynamicModule {
-    const Schema = SchemaFactory.createForClass(Decorator)
-
+  static registerWithoutRequest<D extends AbstractSchema = AbstractSchema>(Decorator: (new () => any) & { collectionName?: string }, hook?: (schema: Schema<D>) => void): DynamicModule {
+    const Schema = this.registerSchema(Decorator, hook)
+    const name = this.getName(Decorator)
     const providers = [
       {
-        provide: `MODEL_${collectionName || Decorator.name}`,
-        useFactory(connection: Connection) {
-          return function (tenant: string) {
-            return connection
-              .useDb(tenant)
-              .model(collectionName || Decorator.name, Schema)
+        provide: `MODEL_FACTORY_${name}`,
+        useFactory: (connection: Connection) => {
+          return (tenant?: string) => {
+            this.createModelFactory(name, Schema)(connection, tenant)
           }
         },
         inject: [getConnectionToken()],
       },
       {
-        provide: `METHOD_${collectionName || Decorator.name}`,
-        useFactory: (modelFactory: (tenant: string) => Model<D & { _id: Types.ObjectId }>) => {
+        provide: `METHOD_FACTORY_${name}`,
+        useFactory: (modelFactory: (tenant: string) => Model<D>) => {
           return function (tenant: string) {
             const model = modelFactory(tenant)
             return factoryMethod(model)
           }
         },
-        inject: [`MODEL_${collectionName || Decorator.name}`],
+        inject: [`MODEL_FACTORY_${name}`],
       }
     ]
     return {

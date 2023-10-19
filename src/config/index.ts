@@ -1,5 +1,12 @@
-import { Document, Expression, FilterQuery, PipelineStage, Types } from 'mongoose'
-
+import { config } from 'dotenv'
+import * as fs from 'fs'
+import { Document, Expression, FilterQuery, Model, PipelineStage, Types } from 'mongoose'
+import * as path from 'path'
+config({
+  path: fs.existsSync(path.join(process.cwd(), '.env'))
+    ? path.join(process.cwd(), '.env')
+    : path.join(process.cwd(), '.env.example'),
+})
 declare module 'express' {
   export interface Request {
     tenant: string
@@ -91,5 +98,11 @@ declare global {
     page: null | number
     limit: null | number
   }
+
+  type ModelMethod = {
+    isSoftDelete: () => boolean
+  }
+
+  type MongoModel<D> = Model<D, {}, ModelMethod>
 }
 global.GlobalConfig = envConfig
