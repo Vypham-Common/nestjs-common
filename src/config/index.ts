@@ -1,6 +1,6 @@
 import { config } from 'dotenv'
 import * as fs from 'fs'
-import { Document, Expression, FilterQuery, Model, PipelineStage, Types } from 'mongoose'
+import { Document, Expression, FilterQuery, PipelineStage, Types } from 'mongoose'
 import * as path from 'path'
 config({
   path: fs.existsSync(path.join(process.cwd(), '.env'))
@@ -99,10 +99,9 @@ declare global {
     limit: null | number
   }
 
-  type ModelMethod = {
+  type ModelStatics = {
     isSoftDelete: () => boolean
   }
 
-  type MongoModel<D> = Model<D, {}, ModelMethod>
 }
 global.GlobalConfig = envConfig

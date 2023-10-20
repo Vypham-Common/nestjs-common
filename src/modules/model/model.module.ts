@@ -1,10 +1,12 @@
-import { BadRequestException, DynamicModule, InternalServerErrorException, Module } from '@nestjs/common'
+import { BadRequestException, DynamicModule, InternalServerErrorException, Module, Provider } from '@nestjs/common'
 import { SchemaFactory, getConnectionToken } from '@nestjs/mongoose'
 import { ClientSession, Connection, FilterQuery, HydratedDocument, MergeType, Model, PipelineStage, PopulateOptions, ProjectionType, QueryOptions, Schema, Types, UpdateQuery } from 'mongoose'
 import { AbstractSchema } from '../../abstracts/AbstractSchema'
+import { getMethodFactoryToken, getMethodToken, getModelFactoryToken, getModelToken } from '../../decorators'
 import { TOKEN } from '../../enums'
 import { getDbName } from '../../utils'
 import { eventEmitter } from '../../utils/eventEmitter'
+import { ConnectionService } from '../connection/connection.service'
 
 type OptionalQueryOption = {
   skip?: number
@@ -17,7 +19,7 @@ type OptionalQueryOption = {
     label: string
     value: string
   }[]
-  populate?: PopulateOptions[] | false
+  populate?: PopulateOptions[]
   projection?: ProjectionType<any>
   softDelete?: boolean
 }
@@ -32,7 +34,8 @@ type Group = {
   }[]
 }
 
-const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {} = object>(Model: Model<D, {}, ModelMethod>) {
+const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & ModelStatics, name?: string) {
+  name ??= Model.collection.name
   function find(
     input: {
       query?: FilterQuery<D>
@@ -60,11 +63,11 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
     pre: Pagination
   }>
 
-  function find<P extends {} = PullPopulate>(
+  function find<P extends {} = {}>(
     input: { query?: FilterQuery<D>; count: false } & OptionalQueryOption
   ): Promise<MergePopulate<D, P>[]>
 
-  function find<P extends {} = PullPopulate>(
+  function find<P extends {} = {}>(
     input: { query?: FilterQuery<D> } & OptionalQueryOption
   ): Promise<{
     data: MergePopulate<D, P>[]
@@ -72,7 +75,7 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
     next: Pagination
     pre: Pagination
   }>
-  async function find<P extends {} = PullPopulate>({
+  async function find<P extends {} = {}>({
     query = {},
     skip,
     limit,
@@ -85,6 +88,11 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
     softDelete = true,
   }: MergeType<{ query?: FilterQuery<D> }, OptionalQueryOption>) {
     const isSoftDelete = Model.isSoftDelete()
+
+    if (isSoftDelete && softDelete) {
+      query.deletedAt = { $ne: null }
+    }
+
     const options: QueryOptions = {}
     if (skip) {
       options.skip = skip
@@ -112,7 +120,7 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
       .exec()
 
 
-    if (populate === false) {
+    if (!populate) {
       promiseFind = Model.find(query, projection, options).exec()
     }
     if (count === false) {
@@ -154,38 +162,35 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
     id: StringOrObjectId,
     options: {
       isThrow: true
-      populate: false
-      message?: string
-    }
-  ): Promise<MergePopulate<D, P>>
-
-  function findById<P extends {}>(
-    id: StringOrObjectId,
-    options: {
-      isThrow: true
       populate: PopulateOptions[]
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
-  function findById<P extends {}>(
+  function findById<P extends {} = {}>(
     id: StringOrObjectId,
     options: {
       populate: PopulateOptions[]
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
-  function findById<P extends {} = PullPopulate>(
+  function findById<P extends {} = {}>(
     id: StringOrObjectId,
-    option?: { message?: string }
+    option?: {
+      message?: string
+      deletedAt?: boolean
+    }
   ): Promise<MergePopulate<D, P> | null>
 
-  function findById<P extends {} = PullPopulate>(
+  function findById<P extends {} = {}>(
     id: StringOrObjectId,
     options: {
       message?: string
       isThrow: true
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
@@ -195,24 +200,26 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
       isThrow,
       message,
       populate,
+      softDelete = true
     }: {
       isThrow?: boolean
       message?: string
-      populate?: PopulateOptions[] | false
+      populate?: PopulateOptions[]
+      softDelete?: boolean
     } = {}
   ) {
+    const isSoftDelete = Model.isSoftDelete()
+    const query: FilterQuery<D> = { _id: id }
+
+    if (isSoftDelete && softDelete) {
+      query.deletedAt = { $exists: false }
+    }
     const data = await Model
-      .findById(id)
-      .populate<P>(
-        populate === false
-          ? []
-          : populate === undefined
-            ? this.populate
-            : populate
-      )
+      .findOne(query)
+      .populate<P>(populate || [])
     if (isThrow === true) {
       if (!data) {
-        throw new BadRequestException(message || `${this.name} not found`)
+        throw new BadRequestException(message || `${name} not found`)
       }
     }
     return data
@@ -222,38 +229,35 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
     query: FilterQuery<D>,
     options: {
       isThrow: true
-      populate: false
-      message?: string
-    }
-  ): Promise<MergePopulate<D, P>>
-
-  function findOne<P extends {}>(
-    query: FilterQuery<D>,
-    options: {
-      isThrow: true
       populate: PopulateOptions[]
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
-  function findOne<P extends {}>(
+  function findOne<P extends {} = {}>(
     query: FilterQuery<D>,
     options: {
       populate: PopulateOptions[]
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
-  function findOne<P extends {} = PullPopulate>(
+  function findOne<P extends {} = {}>(
     query: FilterQuery<D>,
-    options?: { message: string }
+    options?: {
+      message: string
+      deletedAt?: boolean
+    }
   ): Promise<MergePopulate<D, P> | null>
 
-  function findOne<P extends {} = PullPopulate>(
+  function findOne<P extends {} = {}>(
     query: FilterQuery<D>,
     options: {
       isThrow: true
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
@@ -263,44 +267,48 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
       isThrow,
       message,
       populate,
+      softDelete = true
     }: {
       isThrow?: boolean
       message?: string
-      populate?: PopulateOptions[] | false
+      populate?: PopulateOptions[]
+      softDelete?: boolean
     } = {}
   ) {
+    const isSoftDelete = Model.isSoftDelete()
+    if (isSoftDelete && softDelete) {
+      query.deletedAt = { $exists: false }
+    }
     const data = await Model
       .findOne(query)
-      .populate<P>(
-        populate === false
-          ? []
-          : populate === undefined
-            ? this.populate
-            : populate
-      )
+      .populate<P>(populate || [])
       .exec()
     if (isThrow === true) {
       if (!data) {
-        throw new BadRequestException(message || `${this.name} not found`)
+        throw new BadRequestException(message || `${name} not found`)
       }
     }
     return data
   }
   async function exists(
     query: FilterQuery<D>,
-    options?: { throwCase?: 'IF_EXISTS' | 'IF_NOT_EXISTS'; message?: string }
+    options: { throwCase?: 'IF_EXISTS' | 'IF_NOT_EXISTS'; message?: string, softDelete?: boolean } = {}
   ) {
-    const { throwCase, message } = options || {}
+    const { throwCase, message, softDelete = true } = options || {}
+    const isSoftDelete = Model.isSoftDelete()
+    if (isSoftDelete && softDelete) {
+      query.deletedAt = { $exists: false }
+    }
     const isExists = await Model.exists(query)
     switch (throwCase) {
       case 'IF_EXISTS':
         if (isExists) {
-          throw new BadRequestException(message || `${this.name} already exist`)
+          throw new BadRequestException(message || `${name} already exist`)
         }
         break
       case 'IF_NOT_EXISTS':
         if (!isExists) {
-          throw new BadRequestException(message || `${this.name} not found`)
+          throw new BadRequestException(message || `${name} not found`)
         }
         break
     }
@@ -316,6 +324,7 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
       | 'IF_ALL_EXISTS'
       | 'IF_ALL_NOT_EXISTS'
       message?: string
+      softDelete?: boolean
     } = {},
     customQuery?: (ids: StringOrObjectId[]) => FilterQuery<D>
   ) {
@@ -327,7 +336,13 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
     const query: FilterQuery<D> = customQuery
       ? customQuery(ids)
       : { _id: { $in: ids } }
-    const { throwCase, message } = options || {}
+    const { throwCase, message, softDelete = true } = options || {}
+
+    const isSoftDelete = Model.isSoftDelete()
+    if (isSoftDelete && softDelete && !query.deletedAt) {
+      query.deletedAt = { $exists: false }
+    }
+
     const totalDocs = await Model.countDocuments(query)
     const isExistsOne = totalDocs > 0
     const isExistsAll = totalDocs === ids.length
@@ -335,27 +350,27 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
       case 'IF_ONE_EXISTS':
         if (isExistsOne) {
           throw new BadRequestException(
-            message || `One of ${this.name} already exist`
+            message || `One of ${name} already exist`
           )
         }
         break
       case 'IF_ONE_NOT_EXISTS':
         if (!isExistsAll) {
           throw new BadRequestException(
-            message || `One of ${this.name} not found`
+            message || `One of ${name} not found`
           )
         }
         break
       case 'IF_ALL_EXISTS':
         if (isExistsAll) {
           throw new BadRequestException(
-            message || `All ${this.name} already exist`
+            message || `All ${name} already exist`
           )
         }
         break
       case 'IF_ALL_NOT_EXISTS':
         if (!isExistsOne) {
-          throw new BadRequestException(message || `All ${this.name} not found`)
+          throw new BadRequestException(message || `All ${name} not found`)
         }
         break
     }
@@ -403,144 +418,141 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
     input: UpdateQuery<D>,
     options: {
       isThrow: true
-      populate: false
-      message?: string
-    }
-  ): Promise<MergePopulate<D, P>>
-
-  function findByIdAndUpdate<P extends {}>(
-    id: string | Types.ObjectId,
-    input: UpdateQuery<D>,
-    options: {
-      isThrow: true
       populate: PopulateOptions[]
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
-  function findByIdAndUpdate<P extends {}>(
+  function findByIdAndUpdate<P extends {} = {}>(
     id: string | Types.ObjectId,
     input: UpdateQuery<D>,
     options: {
       populate: PopulateOptions[]
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
-  function findByIdAndUpdate<P extends {} = PullPopulate>(
+  function findByIdAndUpdate<P extends {} = {}>(
     id: string | Types.ObjectId,
     input: UpdateQuery<D>,
-    options?: { message: string }
+    options?: {
+      message: string
+      deletedAt?: boolean
+    }
   ): Promise<MergePopulate<D, P> | null>
 
-  function findByIdAndUpdate<P extends {} = PullPopulate>(
+  function findByIdAndUpdate<P extends {} = {}>(
     id: string | Types.ObjectId,
     input: UpdateQuery<D>,
     options: {
       isThrow: true
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P>>
-  async function findByIdAndUpdate<P>(
+  async function findByIdAndUpdate<P extends {} = {}>(
     id: string | Types.ObjectId,
     input: UpdateQuery<D>,
     {
       isThrow,
       message,
       populate,
+      softDelete = true
     }: {
       isThrow?: boolean
       message?: string
-      populate?: PopulateOptions[] | false
+      populate?: PopulateOptions[]
+      softDelete?: boolean
     } = {}
   ) {
+    const query: FilterQuery<D> = { _id: id }
+    const isSoftDelete = Model.isSoftDelete()
+    if (isSoftDelete && softDelete) {
+      query.deletedAt = { $exists: false }
+    }
+
     const data = await Model
       .findByIdAndUpdate(id, input, { new: true })
-      .populate<P>(
-        populate === false
-          ? []
-          : populate === undefined
-            ? this.populate
-            : populate
-      )
+      .populate<P>(populate || [])
       .exec()
+
+
     if (!data) {
       if (isThrow) {
-        throw new BadRequestException(message || `${this.name} not found`)
+        throw new BadRequestException(message || `${name} not found`)
       }
     }
     return data
   }
 
-  function findOneAndUpdate<P = {}>(
-    query: FilterQuery<D>,
-    input: UpdateQuery<D>,
-    options: {
-      isThrow: true
-      populate: false
-      message?: string
-    }
-  ): Promise<MergePopulate<D, P>>
 
-  function findOneAndUpdate<P>(
+  function findOneAndUpdate<P extends {} = []>(
     query: FilterQuery<D>,
     input: UpdateQuery<D>,
     options: {
       isThrow: true
       populate: PopulateOptions[]
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
-  function findOneAndUpdate<P>(
+  function findOneAndUpdate<P extends {} = []>(
     query: FilterQuery<D>,
     input: UpdateQuery<D>,
     options: {
       populate: PopulateOptions[]
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
-  function findOneAndUpdate<P = PullPopulate>(
+  function findOneAndUpdate<P extends {} = []>(
     query: FilterQuery<D>,
     input: UpdateQuery<D>,
-    options?: { message: string }
+    options?: {
+      message: string
+      deletedAt?: boolean
+    }
   ): Promise<MergePopulate<D, P> | null>
 
-  function findOneAndUpdate<P = PullPopulate>(
+  function findOneAndUpdate<P extends {} = []>(
     query: FilterQuery<D>,
     input: UpdateQuery<D>,
     options: {
       isThrow: true
       message?: string
+      deletedAt?: boolean
     }
   ): Promise<MergePopulate<D, P>>
-  async function findOneAndUpdate<P>(
+  async function findOneAndUpdate<P extends {} = []>(
     query: FilterQuery<D>,
     input: UpdateQuery<D>,
     {
       isThrow,
       message,
       populate,
+      softDelete = true
     }: {
       isThrow?: boolean
       message?: string
-      populate?: PopulateOptions[] | false
+      populate?: PopulateOptions[]
+      softDelete?: boolean
     } = {}
   ) {
+    const isSoftDelete = Model.isSoftDelete()
+    if (isSoftDelete && softDelete) {
+      query.deletedAt = { $exists: false }
+    }
     const data = await Model
       .findOneAndUpdate(query, input, { new: true })
-      .populate<P>(
-        populate === false
-          ? []
-          : populate === undefined
-            ? this.populate
-            : populate
-      )
+      .populate<P>(populate || [])
       .exec()
     if (!data) {
       if (isThrow) {
-        throw new BadRequestException(message || `${this.name} not found`)
+        throw new BadRequestException(message || `${name} not found`)
       }
     }
     return data
@@ -548,12 +560,21 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
 
   async function findByIdAndDelete(
     id: string | Types.ObjectId,
-    { isThrow, message }: { isThrow?: boolean; message?: string } = {}
+    { isThrow, message, softDelete = true }: { isThrow?: boolean; message?: string, softDelete?: boolean } = {}
   ) {
-    const data = await Model.findByIdAndDelete(id)
+    const isSoftDelete = Model.isSoftDelete()
+
+    let data: HydratedDocument<D> | null = null
+
+    if (softDelete && isSoftDelete) {
+      data = await Model.findByIdAndUpdate(id, { deletedAt: Date.now() }, { new: true })
+    } else {
+      data = await Model.findByIdAndDelete(id)
+    }
+
     if (!data) {
       if (isThrow) {
-        throw new BadRequestException(message || `${this.name} not found`)
+        throw new BadRequestException(message || `${name} not found`)
       }
     }
     return data
@@ -561,12 +582,21 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
 
   async function findOneAndDelete(
     query: FilterQuery<D>,
-    { isThrow, message }: { isThrow?: boolean; message?: string } = {}
+    { isThrow, message, softDelete }: { isThrow?: boolean; message?: string, softDelete?: boolean } = {}
   ) {
-    const data = await Model.findOneAndDelete(query)
+    const isSoftDelete = Model.isSoftDelete()
+
+    let data: HydratedDocument<D> | null = null
+
+    if (softDelete && isSoftDelete) {
+      data = await Model.findOneAndUpdate(query, { deletedAt: Date.now() }, { new: true })
+    } else {
+      data = await Model.findOneAndDelete(query)
+    }
+
     if (!data) {
       if (isThrow) {
-        throw new BadRequestException(message || `${this.name} not found`)
+        throw new BadRequestException(message || `${name} not found`)
       }
     }
     return data
@@ -639,7 +669,7 @@ const factoryMethod = function <D extends AbstractSchema, PullPopulate extends {
   }
 
   async function transaction<T = any>(callback: (session: ClientSession) => Promise<T>) {
-    const session = await this.M.connection.startSession()
+    const session = await Model.startSession()
     try {
       session.startTransaction()
       const result = await callback(session)
@@ -817,8 +847,10 @@ export type MethodFactory<D extends AbstractSchema> = (tenant: string) => Method
 
 @Module({})
 export class ModelModule {
-  private static registerSchema<D = any>(Decorator: new () => D, hook?: (schema: Schema<D>) => void) {
+  private static registerSchema<D extends AbstractSchema>(Decorator: new () => any, hook?: (schema: Schema<D>) => void) {
     const Schema = SchemaFactory.createForClass(Decorator)
+    Schema.add({ deletedAt: Date })
+
     if (hook) {
       hook(Schema)
     }
@@ -826,10 +858,23 @@ export class ModelModule {
   }
 
   private static createModelFactory<D = any>(name: string, Schema: Schema<D>) {
-    return function (connection: Connection, tenant?: string) {
-      return connection
+    return function (connection: Connection, tenantService: ConnectionService, tenant: string | undefined = undefined,) {
+      const getConnection = tenantService.get(getDbName(tenant))
+      if (getConnection) {
+        if (getConnection.models[name]) {
+          return getConnection.models[name]
+        }
+        return getConnection.model(name, Schema)
+      }
+
+      const createConnection = connection
         .useDb(getDbName(tenant))
-        .model(name, Schema)
+
+      const setConnection = tenantService.set(getDbName(tenant), createConnection)
+      if (setConnection.models[name]) {
+        return setConnection.models[name]
+      }
+      return setConnection.model(name, Schema)
     }
   }
 
@@ -837,21 +882,32 @@ export class ModelModule {
     return Decorator.collectionName || Decorator.name
   }
 
-  static register<D = any>(Decorator: (new () => any) & { collectionName?: string }, hook?: (schema: Schema<D>) => void): DynamicModule {
-    const Schema = this.registerSchema(Decorator, hook)
-    const name = this.getName(Decorator)
-    const providers = [
-      {
-        provide: `MODEL_${name}`,
-        useFactory: this.createModelFactory(name, Schema),
-        inject: [getConnectionToken(), TOKEN.TENANT],
-      },
-      {
-        provide: `METHOD_${name}`,
-        useFactory: factoryMethod,
-        inject: [`MODEL_${name}`],
-      }
-    ]
+
+  static register<D extends AbstractSchema = any>(
+    regiserInput: {
+      schema: (new () => any) & { collectionName?: string },
+      hook?: (schema: Schema<D>) => void
+    }[]
+  ): DynamicModule {
+    const providers: Provider[] = []
+    regiserInput.forEach(input => {
+      const Schema = this.registerSchema(input.schema, input.hook)
+      const name = this.getName(input.schema)
+      providers.push(
+        {
+          provide: getModelToken(name),
+          useFactory: this.createModelFactory(name, Schema),
+          inject: [getConnectionToken(), ConnectionService, TOKEN.TENANT],
+        },
+        {
+          provide: getMethodToken(name),
+          useFactory: (Model: Model<D> & ModelStatics) => {
+            factoryMethod(Model, name)
+          },
+          inject: [getModelToken(name)],
+        }
+      )
+    })
     return {
       module: ModelModule,
       providers: providers,
@@ -859,30 +915,39 @@ export class ModelModule {
     }
   }
 
-  static registerWithoutRequest<D extends AbstractSchema = AbstractSchema>(Decorator: (new () => any) & { collectionName?: string }, hook?: (schema: Schema<D>) => void): DynamicModule {
-    const Schema = this.registerSchema(Decorator, hook)
-    const name = this.getName(Decorator)
-    const providers = [
-      {
-        provide: `MODEL_FACTORY_${name}`,
-        useFactory: (connection: Connection) => {
-          return (tenant?: string) => {
-            this.createModelFactory(name, Schema)(connection, tenant)
-          }
+  static registerWithoutRequest<D extends AbstractSchema = AbstractSchema>(
+    regiserInput: {
+      schema: (new () => any) & { collectionName?: string },
+      hook?: (schema: Schema<D>) => void
+    }[]
+  ): DynamicModule {
+    const providers: Provider[] = []
+    regiserInput.forEach(input => {
+      const Schema = this.registerSchema(input.schema, input.hook)
+      const name = this.getName(input.schema)
+      providers.push(
+        {
+          provide: getModelFactoryToken(name),
+          useFactory: (connection: Connection, tenantService: ConnectionService) => {
+            return (tenant?: string) => {
+              return this.createModelFactory(name, Schema)(connection, tenantService, tenant)
+            }
+          },
+          inject: [getConnectionToken(), ConnectionService],
         },
-        inject: [getConnectionToken()],
-      },
-      {
-        provide: `METHOD_FACTORY_${name}`,
-        useFactory: (modelFactory: (tenant: string) => Model<D>) => {
-          return function (tenant: string) {
-            const model = modelFactory(tenant)
-            return factoryMethod(model)
-          }
-        },
-        inject: [`MODEL_FACTORY_${name}`],
-      }
-    ]
+        {
+          provide: getMethodFactoryToken(name),
+          useFactory: (modelFactory: (tenant: string) => Model<D> & ModelStatics) => {
+            return function (tenant: string) {
+              const model = modelFactory(tenant)
+              return factoryMethod(model, name)
+            }
+          },
+          inject: [getModelFactoryToken(name)],
+        }
+      )
+    })
+
     return {
       module: ModelModule,
       providers: providers,

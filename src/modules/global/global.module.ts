@@ -3,6 +3,7 @@ import { APP_FILTER, APP_INTERCEPTOR, REQUEST } from '@nestjs/core'
 import { Request } from 'express'
 import { TOKEN } from '../../enums'
 import { AllExceptionsFilter, TransformResponse } from '../../utils'
+import { ConnectionModule } from '../connection/connection.module'
 import { WorkerModule } from '../worker/worker.module'
 
 const provideUser = {
@@ -34,8 +35,8 @@ const provideMiddleware = [
 
 @Global()
 @Module({
-  imports: [WorkerModule],
+  imports: [WorkerModule, ConnectionModule],
   providers: [provideUser, provideTenant, ...provideMiddleware],
-  exports: [provideUser, provideTenant, WorkerModule],
+  exports: [provideUser, provideTenant, WorkerModule, ConnectionModule],
 })
 export class GlobalModule { }
