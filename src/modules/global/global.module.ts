@@ -7,6 +7,8 @@ import { TOKEN } from '../../enums'
 import { AllExceptionsFilter, TransformResponse } from '../../utils'
 import { ConnectionModule } from '../connection/connection.module'
 import { ConnectionService } from '../connection/connection.service'
+import { ModelModule } from '../model'
+import { WorkerService } from '../worker'
 import { WorkerModule } from '../worker/worker.module'
 
 const provideUser = {
@@ -74,10 +76,12 @@ export class GlobalModule {
   @InjectConnection() connection: Connection
   @Inject() connectionService: ConnectionService
   @Inject('INIT_INJECTION') initInjection: any[]
+  @Inject() workerService: WorkerService
   async onModuleInit() {
     if (GlobalModule.init) {
       await GlobalModule.init(...this.initInjection)
     }
+    ModelModule.init(this.connection, this.connectionService, this.workerService)
   }
 }
 

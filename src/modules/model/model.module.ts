@@ -1,5 +1,5 @@
-import { BadRequestException, DynamicModule, Inject, InternalServerErrorException, Module, Provider } from '@nestjs/common'
-import { InjectConnection, SchemaFactory, getConnectionToken } from '@nestjs/mongoose'
+import { BadRequestException, DynamicModule, InternalServerErrorException, Module, Provider } from '@nestjs/common'
+import { SchemaFactory, getConnectionToken } from '@nestjs/mongoose'
 import { ClientSession, Connection, FilterQuery, HydratedDocument, MergeType, Model, PipelineStage, PopulateOptions, ProjectionType, QueryOptions, Schema, Types, UpdateQuery } from 'mongoose'
 import { AbstractSchema } from '../../abstracts/AbstractSchema'
 import { getMethodFactoryToken, getMethodToken, getModelFactoryToken, getModelToken } from '../../decorators'
@@ -834,18 +834,41 @@ export type MethodFactory<D extends AbstractSchema> = (tenant?: string) => Metho
 
 @Module({})
 export class ModelModule {
-  private static regiserInput: {
+  private static registerInput: {
     [k: string]: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<any>) => void, master?: boolean, })
   } = {}
 
   private static registerSchema<D extends AbstractSchema>(Decorator: new () => any, hook?: (schema: Schema<D>) => void) {
     const Schema = SchemaFactory.createForClass(Decorator)
     Schema.add({ deletedAt: Date })
-
     if (hook) {
       hook(Schema)
     }
     return Schema
+  }
+
+  private static registerWithTenant<D extends AbstractSchema = AbstractSchema>(
+    input: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, }),
+    tenant: string | undefined = undefined,
+    connection: Connection,
+    connectionService: ConnectionService,
+  ) {
+    const Schema = this.registerSchema(input, input.hook)
+    const name = this.getName(input)
+    this.createModelFactory(name, Schema)(connection, connectionService, tenant)
+  }
+
+  static init(connection: Connection, connectionService: ConnectionService, workerService: WorkerService) {
+    Object.values(this.registerInput).forEach(input => {
+      if (input.master) {
+        ModelModule.registerWithTenant(input, undefined, connection, connectionService)
+      } else {
+        global.tenants.forEach((id) => {
+          ModelModule.registerWithTenant(input, id, connection, connectionService)
+          workerService.register(id, input.collectionName || input.name)
+        })
+      }
+    })
   }
 
   static createModelFactory<D = any>(name: string, Schema: Schema<D>) {
@@ -874,15 +897,6 @@ export class ModelModule {
     return Decorator.collectionName || Decorator.name
   }
 
-  static registerInit<D extends AbstractSchema = any>(
-    regiserInput: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, })[]
-  ) {
-    regiserInput.forEach(input => {
-      const name = this.getName(input)
-      this.regiserInput[name] = input
-    })
-  }
-
   static register<D extends AbstractSchema = any>(
     regiserInput: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, })[],
   ): DynamicModule {
@@ -890,7 +904,7 @@ export class ModelModule {
     regiserInput.forEach(input => {
       const Schema = this.registerSchema(input, input.hook)
       const name = this.getName(input)
-
+      this.registerInput[name] = input
       const injectModel = [getConnectionToken(), ConnectionService,]
       const injectMethod = [getModelToken(name),]
       if (!input.master) {
@@ -927,6 +941,7 @@ export class ModelModule {
     regiserInput.forEach(input => {
       const Schema = this.registerSchema(input, input.hook)
       const name = this.getName(input)
+      this.registerInput[name] = input
       providers.push(
         {
           provide: getModelFactoryToken(name),
@@ -956,32 +971,5 @@ export class ModelModule {
       providers: providers,
       exports: providers,
     }
-  }
-
-  private static registerWithTenant<D extends AbstractSchema = AbstractSchema>(
-    input: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, }),
-    tenant: string | undefined = undefined,
-    connection: Connection,
-    connectionService: ConnectionService,
-  ) {
-    const Schema = this.registerSchema(input, input.hook)
-    const name = this.getName(input)
-    this.createModelFactory(name, Schema)(connection, connectionService, tenant)
-  }
-
-  @Inject() workerService: WorkerService
-  @InjectConnection() connection: Connection
-  @Inject() connectionService: ConnectionService
-  onModuleInit() {
-    Object.values(ModelModule.regiserInput).forEach(input => {
-      if (input.master) {
-        ModelModule.registerWithTenant(input, undefined, this.connection, this.connectionService)
-      } else {
-        global.tenants.forEach((id) => {
-          ModelModule.registerWithTenant(input, id, this.connection, this.connectionService)
-          this.workerService.register(id, input.collectionName || input.name)
-        })
-      }
-    })
   }
 }
