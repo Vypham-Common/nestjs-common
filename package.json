@@ -1,5 +1,5 @@
 {
-  "name": "@Vypham-Common/nestjs-common",
+  "name": "@vy-pham/nestjs-common",
   "version": "1.3.6",
   "description": "Nestjs common function for my project",
   "main": "dist/index.js",
