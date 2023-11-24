@@ -1,9 +1,12 @@
-import { Global, Module } from '@nestjs/common'
+import { DynamicModule, ForwardReference, Global, Inject, InjectionToken, Module, OptionalFactoryDependency, Provider, Type } from '@nestjs/common'
 import { APP_FILTER, APP_INTERCEPTOR, REQUEST } from '@nestjs/core'
+import { InjectConnection } from '@nestjs/mongoose'
 import { Request } from 'express'
+import { Connection } from 'mongoose'
 import { TOKEN } from '../../enums'
 import { AllExceptionsFilter, TransformResponse } from '../../utils'
 import { ConnectionModule } from '../connection/connection.module'
+import { ConnectionService } from '../connection/connection.service'
 import { WorkerModule } from '../worker/worker.module'
 
 const provideUser = {
@@ -39,4 +42,42 @@ const provideMiddleware = [
   providers: [provideUser, provideTenant, ...provideMiddleware],
   exports: [provideUser, provideTenant, WorkerModule, ConnectionModule],
 })
-export class GlobalModule { }
+export class GlobalModule {
+  private static init?: (...args: any[]) => any
+  static register(
+    input?: {
+      init?: (...args: any[]) => any,
+      initInject?: Array<InjectionToken | OptionalFactoryDependency>,
+      providers?: Provider[],
+      imports?: Array<Type<any> | DynamicModule | Promise<DynamicModule> | ForwardReference>
+    }
+  ): DynamicModule {
+
+    this.init = input?.init
+
+    const providers: Provider[] = input?.providers || []
+
+    providers.push({
+      provide: 'INIT_INJECTION',
+      useFactory: async (...args: any[]) => {
+        return args
+      },
+      inject: input?.initInject || []
+    })
+    return {
+      module: GlobalModule,
+      imports: input?.imports || [],
+      providers: providers,
+      exports: providers,
+    }
+  }
+  @InjectConnection() connection: Connection
+  @Inject() connectionService: ConnectionService
+  @Inject('INIT_INJECTION') initInjection: any[]
+  async onModuleInit() {
+    if (GlobalModule.init) {
+      await GlobalModule.init(...this.initInjection)
+    }
+  }
+}
+

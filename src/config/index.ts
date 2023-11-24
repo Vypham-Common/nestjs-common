@@ -27,6 +27,7 @@ declare global {
   var GlobalConfig: {
     [k in keyof typeof envConfig]: string
   }
+  var tenants: string[]
   export interface JWTPayload {
     _id: Types.ObjectId
     tenant: string
@@ -86,7 +87,6 @@ declare global {
     match?: FilterQuery<any>,
     project?: NestedObjectSelect,
     keepNull?: boolean
-    global?: boolean
     let?: PipelineStage.Lookup['$lookup']['let'],
     sort?: Record<string, 1 | -1 | Expression.Meta>,
     skip?: number,
@@ -105,3 +105,4 @@ declare global {
 
 }
 global.GlobalConfig = envConfig
+global.tenants = []

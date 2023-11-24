@@ -1,13 +1,14 @@
-import { BadRequestException, DynamicModule, InternalServerErrorException, Module, Provider } from '@nestjs/common'
-import { SchemaFactory, getConnectionToken } from '@nestjs/mongoose'
+import { BadRequestException, DynamicModule, Inject, InternalServerErrorException, Module, Provider } from '@nestjs/common'
+import { InjectConnection, SchemaFactory, getConnectionToken } from '@nestjs/mongoose'
 import { ClientSession, Connection, FilterQuery, HydratedDocument, MergeType, Model, PipelineStage, PopulateOptions, ProjectionType, QueryOptions, Schema, Types, UpdateQuery } from 'mongoose'
 import { AbstractSchema } from '../../abstracts/AbstractSchema'
 import { getMethodFactoryToken, getMethodToken, getModelFactoryToken, getModelToken } from '../../decorators'
 import { TOKEN } from '../../enums'
 import { getDbName } from '../../utils'
 import { eventEmitter } from '../../utils/eventEmitter'
+import { ConnectionModule } from '../connection'
 import { ConnectionService } from '../connection/connection.service'
-
+import { WorkerService } from '../worker'
 type OptionalQueryOption = {
   skip?: number
   limit?: number
@@ -34,7 +35,7 @@ type Group = {
   }[]
 }
 
-const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & ModelStatics, name?: string) {
+const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & ModelStatics, name: string, tenant: string) {
   name ??= Model.collection.name
   function find(
     input: {
@@ -90,7 +91,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     const isSoftDelete = Model.isSoftDelete()
 
     if (isSoftDelete && softDelete) {
-      query.deletedAt = { $ne: null }
+      query.deletedAt = { $exists: false }
     }
 
     const options: QueryOptions = {}
@@ -105,7 +106,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     } else {
       options.sort = { _id: -1 }
     }
-    if (typeof lean === 'boolean') {
+    if (lean) {
       options.lean = lean
     }
 
@@ -116,7 +117,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
       (HydratedDocument<D> | MergePopulate<D, P>)[]
     > = Model
       .find(query, projection, options)
-      .populate<P>(populate || this.populate)
+      .populate<P>(populate || [])
       .exec()
 
 
@@ -164,7 +165,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
       isThrow: true
       populate: PopulateOptions[]
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
@@ -173,7 +174,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     options: {
       populate: PopulateOptions[]
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
@@ -181,7 +182,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     id: StringOrObjectId,
     option?: {
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
@@ -190,7 +191,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     options: {
       message?: string
       isThrow: true
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
@@ -231,7 +232,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
       isThrow: true
       populate: PopulateOptions[]
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
@@ -240,7 +241,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     options: {
       populate: PopulateOptions[]
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
@@ -248,7 +249,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     query: FilterQuery<D>,
     options?: {
       message: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
@@ -257,7 +258,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     options: {
       isThrow: true
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
@@ -267,12 +268,14 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
       isThrow,
       message,
       populate,
+      select,
       softDelete = true
     }: {
       isThrow?: boolean
       message?: string
       populate?: PopulateOptions[]
       softDelete?: boolean
+      select?: string | string[] | Record<string, number | boolean | object>
     } = {}
   ) {
     const isSoftDelete = Model.isSoftDelete()
@@ -282,6 +285,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     const data = await Model
       .findOne(query)
       .populate<P>(populate || [])
+      .select(select || [])
       .exec()
     if (isThrow === true) {
       if (!data) {
@@ -420,7 +424,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
       isThrow: true
       populate: PopulateOptions[]
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
@@ -430,7 +434,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     options: {
       populate: PopulateOptions[]
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
@@ -439,7 +443,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     input: UpdateQuery<D>,
     options?: {
       message: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
@@ -449,7 +453,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     options: {
       isThrow: true
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P>>
   async function findByIdAndUpdate<P extends {} = {}>(
@@ -495,7 +499,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
       isThrow: true
       populate: PopulateOptions[]
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P>>
 
@@ -505,7 +509,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     options: {
       populate: PopulateOptions[]
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
@@ -514,7 +518,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     input: UpdateQuery<D>,
     options?: {
       message: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P> | null>
 
@@ -524,7 +528,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     options: {
       isThrow: true
       message?: string
-      deletedAt?: boolean
+      softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P>>
   async function findOneAndUpdate<P extends {} = []>(
@@ -646,7 +650,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     fn: () => Promise<T> | T
   ): Promise<T> {
     const id = new Types.ObjectId().toString()
-    if (!this.tenant) {
+    if (!tenant) {
       throw new InternalServerErrorException('Cannot use worker queue without tenant')
     }
     const promise = new Promise<T>((resolve, reject) => {
@@ -661,7 +665,7 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
       eventEmitter.once(id, eventCb)
     })
 
-    eventEmitter.emit(this.tenant, {
+    eventEmitter.emit(`${tenant}_${name}`, {
       id,
       fn
     })
@@ -683,147 +687,130 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
     }
   }
 
-  return {
-    model: Model,
-    generatePopulate(
-      populate: (PopulateOptions & { global?: boolean })[]
-    ): PopulateOptions[] {
-      return populate.map(({ global, ...o }) => {
-        if (
-          o.model &&
-          typeof o.model === 'string' &&
-          !global &&
-          !o.model.includes(this.tenant as string)
-        ) {
-          o.model = this.getCollectionName(o.model)
+
+  function generateLookup(pipelines: GeneratePipeline[], prefix = '') {
+    const mappedPipeline: Exclude<
+      PipelineStage,
+      PipelineStage.Merge | PipelineStage.Out
+    >[] = []
+    pipelines.forEach((pipeline) => {
+      const { unwind = true, keepNull = false, project } = pipeline
+
+      if (typeof pipeline.localField === 'string') {
+        const localField = `${prefix}${String(pipeline.localField)}`
+        const as = `${prefix}${String(pipeline.as || pipeline.localField)}`
+        const from = pipeline.from
+        const lookupStage: PipelineStage.Lookup = {
+          $lookup: {
+            from: from,
+            localField: localField,
+            foreignField: pipeline.foreignField || '_id',
+            as: as,
+          },
         }
-        if (o.populate) {
-          o.populate = this.generatePopulate(o.populate as PopulateOptions[])
+        if (pipeline.let) {
+          lookupStage.$lookup.let = pipeline.let
         }
-        return {
-          ...o,
+        if (pipeline.pipeline) {
+          lookupStage.$lookup.pipeline = pipeline.pipeline
         }
-      })
-    },
-    generateLookup(pipelines: GeneratePipeline[], prefix = '') {
-      const mappedPipeline: Exclude<
-        PipelineStage,
-        PipelineStage.Merge | PipelineStage.Out
-      >[] = []
-      pipelines.forEach((pipeline) => {
-        const { unwind = true, keepNull = false, project } = pipeline
 
-        if (typeof pipeline.localField === 'string') {
-          const localField = `${prefix}${String(pipeline.localField)}`
-          const as = `${prefix}${String(pipeline.as || pipeline.localField)}`
-          const from = pipeline.global ? pipeline.from : this.getCollectionName(pipeline.from)
-          const lookupStage: PipelineStage.Lookup = {
-            $lookup: {
-              from: from,
-              localField: localField,
-              foreignField: pipeline.foreignField || '_id',
-              as: as,
-            },
-          }
-          if (pipeline.let) {
-            lookupStage.$lookup.let = pipeline.let
-          }
-          if (pipeline.pipeline) {
-            lookupStage.$lookup.pipeline = pipeline.pipeline
-          }
-
-          if (pipeline.sort) {
-            if (lookupStage.$lookup.pipeline) {
-              lookupStage.$lookup.pipeline.push({
-                $sort: pipeline.sort
-              })
-            } else {
-              lookupStage.$lookup.pipeline = [{
-                $sort: pipeline.sort
-              }]
-            }
-          }
-
-          if (pipeline.skip && Number.isInteger(pipeline.skip)) {
-            if (lookupStage.$lookup.pipeline) {
-              lookupStage.$lookup.pipeline.push({
-                $skip: pipeline.skip
-              })
-            } else {
-              lookupStage.$lookup.pipeline = [{
-                $skip: pipeline.skip
-              }]
-            }
-          }
-
-          if (pipeline.limit && Number.isInteger(pipeline.limit)) {
-            if (lookupStage.$lookup.pipeline) {
-              lookupStage.$lookup.pipeline.push({
-                $limit: pipeline.limit
-              })
-            } else {
-              lookupStage.$lookup.pipeline = [{
-                $limit: pipeline.limit
-              }]
-            }
-          }
-
-          mappedPipeline.push(lookupStage)
-          if (unwind) {
-            mappedPipeline.push({
-              $unwind: {
-                path: `$${as}`,
-                preserveNullAndEmptyArrays: keepNull,
-              },
+        if (pipeline.sort) {
+          if (lookupStage.$lookup.pipeline) {
+            lookupStage.$lookup.pipeline.push({
+              $sort: pipeline.sort
             })
+          } else {
+            lookupStage.$lookup.pipeline = [{
+              $sort: pipeline.sort
+            }]
           }
-          if (pipeline.match) {
-            if (lookupStage.$lookup.pipeline) {
-              lookupStage.$lookup.pipeline.push({
-                $match: pipeline.match
-              })
-            } else {
-              lookupStage.$lookup.pipeline = [{
-                $match: pipeline.match
-              }]
-            }
+        }
+
+        if (pipeline.skip && Number.isInteger(pipeline.skip)) {
+          if (lookupStage.$lookup.pipeline) {
+            lookupStage.$lookup.pipeline.push({
+              $skip: pipeline.skip
+            })
+          } else {
+            lookupStage.$lookup.pipeline = [{
+              $skip: pipeline.skip
+            }]
           }
-          if (pipeline.lookup) {
-            const nestedLookup = this.generateLookup(pipeline.lookup)
-            if (lookupStage.$lookup.pipeline) {
-              lookupStage.$lookup.pipeline.push(...nestedLookup)
-            } else {
-              lookupStage.$lookup.pipeline = nestedLookup
-            }
+        }
+
+        if (pipeline.limit && Number.isInteger(pipeline.limit)) {
+          if (lookupStage.$lookup.pipeline) {
+            lookupStage.$lookup.pipeline.push({
+              $limit: pipeline.limit
+            })
+          } else {
+            lookupStage.$lookup.pipeline = [{
+              $limit: pipeline.limit
+            }]
           }
-          if (pipeline.postPipeline) {
-            if (lookupStage.$lookup.pipeline) {
-              lookupStage.$lookup.pipeline.push(...pipeline.postPipeline)
-            } else {
-              lookupStage.$lookup.pipeline = pipeline.postPipeline
-            }
-          }
-          if (project) {
-            if (lookupStage.$lookup.pipeline) {
-              lookupStage.$lookup.pipeline.push({
-                $project: project
-              })
-            } else {
-              lookupStage.$lookup.pipeline = [{
-                $project: project
-              }]
-            }
-          }
-        } else {
-          pipeline.localField.forEach(localField => {
-            const pipelines = this.generateLookup([{ ...pipeline, localField }])
-            mappedPipeline.push(...pipelines)
+        }
+
+        mappedPipeline.push(lookupStage)
+        if (unwind) {
+          mappedPipeline.push({
+            $unwind: {
+              path: `$${as}`,
+              preserveNullAndEmptyArrays: keepNull,
+            },
           })
         }
+        if (pipeline.match) {
+          if (lookupStage.$lookup.pipeline) {
+            lookupStage.$lookup.pipeline.push({
+              $match: pipeline.match
+            })
+          } else {
+            lookupStage.$lookup.pipeline = [{
+              $match: pipeline.match
+            }]
+          }
+        }
+        if (pipeline.lookup) {
+          const nestedLookup = generateLookup(pipeline.lookup)
+          if (lookupStage.$lookup.pipeline) {
+            lookupStage.$lookup.pipeline.push(...nestedLookup)
+          } else {
+            lookupStage.$lookup.pipeline = nestedLookup
+          }
+        }
+        if (pipeline.postPipeline) {
+          if (lookupStage.$lookup.pipeline) {
+            lookupStage.$lookup.pipeline.push(...pipeline.postPipeline)
+          } else {
+            lookupStage.$lookup.pipeline = pipeline.postPipeline
+          }
+        }
+        if (project) {
+          if (lookupStage.$lookup.pipeline) {
+            lookupStage.$lookup.pipeline.push({
+              $project: project
+            })
+          } else {
+            lookupStage.$lookup.pipeline = [{
+              $project: project
+            }]
+          }
+        }
+      } else {
+        pipeline.localField.forEach(localField => {
+          const pipelines = generateLookup([{ ...pipeline, localField }])
+          mappedPipeline.push(...pipelines)
+        })
+      }
 
-      })
-      return mappedPipeline
-    },
+    })
+    return mappedPipeline
+  }
+
+  return {
+    model: Model,
+    generateLookup,
     find,
     findByPipeline,
     findOne,
@@ -840,13 +827,17 @@ const factoryMethod = function <D extends AbstractSchema>(Model: Model<D> & Mode
   }
 }
 
-export type Method<D extends AbstractSchema> = ReturnType<typeof factoryMethod<D >>
+export type Method<D extends AbstractSchema> = ReturnType<typeof methodFactory<D >>
 
-export type ModelFactory<D extends AbstractSchema> = (tenant: string) => Model<D>
-export type MethodFactory<D extends AbstractSchema> = (tenant: string) => Method<D>
+export type ModelFactory<D extends AbstractSchema> = (tenant?: string) => Model<D>
+export type MethodFactory<D extends AbstractSchema> = (tenant?: string) => Method<D>
 
 @Module({})
 export class ModelModule {
+  private static regiserInput: {
+    [k: string]: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<any>) => void, master?: boolean, })
+  } = {}
+
   private static registerSchema<D extends AbstractSchema>(Decorator: new () => any, hook?: (schema: Schema<D>) => void) {
     const Schema = SchemaFactory.createForClass(Decorator)
     Schema.add({ deletedAt: Date })
@@ -857,9 +848,10 @@ export class ModelModule {
     return Schema
   }
 
-  private static createModelFactory<D = any>(name: string, Schema: Schema<D>) {
-    return function (connection: Connection, tenantService: ConnectionService, tenant: string | undefined = undefined,) {
-      const getConnection = tenantService.get(getDbName(tenant))
+  static createModelFactory<D = any>(name: string, Schema: Schema<D>) {
+    return function (connection: Connection, connectionService: ConnectionService, tenant: string | undefined = undefined,) {
+      const dbName = getDbName(tenant)
+      const getConnection = connectionService.get(dbName)
       if (getConnection) {
         if (getConnection.models[name]) {
           return getConnection.models[name]
@@ -868,9 +860,9 @@ export class ModelModule {
       }
 
       const createConnection = connection
-        .useDb(getDbName(tenant))
+        .useDb(dbName)
 
-      const setConnection = tenantService.set(getDbName(tenant), createConnection)
+      const setConnection = connectionService.set(dbName, createConnection)
       if (setConnection.models[name]) {
         return setConnection.models[name]
       }
@@ -882,29 +874,42 @@ export class ModelModule {
     return Decorator.collectionName || Decorator.name
   }
 
+  static registerInit<D extends AbstractSchema = any>(
+    regiserInput: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, })[]
+  ) {
+    regiserInput.forEach(input => {
+      const name = this.getName(input)
+      this.regiserInput[name] = input
+    })
+  }
 
   static register<D extends AbstractSchema = any>(
-    regiserInput: {
-      schema: (new () => any) & { collectionName?: string },
-      hook?: (schema: Schema<D>) => void
-    }[]
+    regiserInput: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, })[],
   ): DynamicModule {
     const providers: Provider[] = []
     regiserInput.forEach(input => {
-      const Schema = this.registerSchema(input.schema, input.hook)
-      const name = this.getName(input.schema)
+      const Schema = this.registerSchema(input, input.hook)
+      const name = this.getName(input)
+
+      const injectModel = [getConnectionToken(), ConnectionService,]
+      const injectMethod = [getModelToken(name),]
+      if (!input.master) {
+        injectModel.push(TOKEN.TENANT)
+        injectMethod.push(TOKEN.TENANT)
+      }
+
       providers.push(
         {
           provide: getModelToken(name),
           useFactory: this.createModelFactory(name, Schema),
-          inject: [getConnectionToken(), ConnectionService, TOKEN.TENANT],
+          inject: injectModel
         },
         {
           provide: getMethodToken(name),
-          useFactory: (Model: Model<D> & ModelStatics) => {
-            factoryMethod(Model, name)
+          useFactory: (Model: Model<D> & ModelStatics, tenant?: string) => {
+            return methodFactory(Model, name, tenant || global.GlobalConfig.MONGODB_NAME)
           },
-          inject: [getModelToken(name)],
+          inject: injectMethod
         }
       )
     })
@@ -916,15 +921,12 @@ export class ModelModule {
   }
 
   static registerWithoutRequest<D extends AbstractSchema = AbstractSchema>(
-    regiserInput: {
-      schema: (new () => any) & { collectionName?: string },
-      hook?: (schema: Schema<D>) => void
-    }[]
+    regiserInput: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, })[],
   ): DynamicModule {
     const providers: Provider[] = []
     regiserInput.forEach(input => {
-      const Schema = this.registerSchema(input.schema, input.hook)
-      const name = this.getName(input.schema)
+      const Schema = this.registerSchema(input, input.hook)
+      const name = this.getName(input)
       providers.push(
         {
           provide: getModelFactoryToken(name),
@@ -937,10 +939,10 @@ export class ModelModule {
         },
         {
           provide: getMethodFactoryToken(name),
-          useFactory: (modelFactory: (tenant: string) => Model<D> & ModelStatics) => {
-            return function (tenant: string) {
+          useFactory: (modelFactory: (tenant?: string) => Model<D> & ModelStatics) => {
+            return function (tenant?: string) {
               const model = modelFactory(tenant)
-              return factoryMethod(model, name)
+              return methodFactory(model, name, tenant || global.GlobalConfig.MONGODB_NAME)
             }
           },
           inject: [getModelFactoryToken(name)],
@@ -950,8 +952,36 @@ export class ModelModule {
 
     return {
       module: ModelModule,
+      imports: [ConnectionModule],
       providers: providers,
       exports: providers,
     }
+  }
+
+  private static registerWithTenant<D extends AbstractSchema = AbstractSchema>(
+    input: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, }),
+    tenant: string | undefined = undefined,
+    connection: Connection,
+    connectionService: ConnectionService,
+  ) {
+    const Schema = this.registerSchema(input, input.hook)
+    const name = this.getName(input)
+    this.createModelFactory(name, Schema)(connection, connectionService, tenant)
+  }
+
+  @Inject() workerService: WorkerService
+  @InjectConnection() connection: Connection
+  @Inject() connectionService: ConnectionService
+  onModuleInit() {
+    Object.values(ModelModule.regiserInput).forEach(input => {
+      if (input.master) {
+        ModelModule.registerWithTenant(input, undefined, this.connection, this.connectionService)
+      } else {
+        global.tenants.forEach((id) => {
+          ModelModule.registerWithTenant(input, id, this.connection, this.connectionService)
+          this.workerService.register(id, input.collectionName || input.name)
+        })
+      }
+    })
   }
 }

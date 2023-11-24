@@ -17,5 +17,5 @@ export class QueryOptionDto {
   @IsOptional()
   @IsArray()
   @TransformArray
-  sort?: string[]
+  'sort[]'?: string[]
 }
