@@ -5,5 +5,6 @@ export * from './public.decorator'
 export * from './query-options.decorator'
 export * from './transform-array.decorator'
 export * from './transform-date.decorator'
-export * from './transform-objectId.decorator'
+export * from './transform-object-id.decorator'
+export * from './transform-trim-string.decorator'
 
