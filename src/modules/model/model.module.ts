@@ -180,7 +180,7 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
 
   function findById<P extends {} = {}>(
     id: StringOrObjectId,
-    option?: {
+    option: {
       message?: string
       softDelete?: boolean
     }
@@ -194,6 +194,10 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
       softDelete?: boolean
     }
   ): Promise<MergePopulate<D, P>>
+
+  function findById<P extends {} = {}>(
+    id: StringOrObjectId,
+  ): Promise<MergePopulate<D, P> | null>
 
   async function findById<P extends {} = {}>(
     id: StringOrObjectId,
@@ -247,10 +251,14 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
 
   function findOne<P extends {} = {}>(
     query: FilterQuery<D>,
-    options?: {
+    options: {
       message: string
       softDelete?: boolean
     }
+  ): Promise<MergePopulate<D, P> | null>
+
+  function findOne<P extends {} = {}>(
+    query: FilterQuery<D>,
   ): Promise<MergePopulate<D, P> | null>
 
   function findOne<P extends {} = {}>(
@@ -441,7 +449,12 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
   function findByIdAndUpdate<P extends {} = {}>(
     id: string | Types.ObjectId,
     input: UpdateQuery<D>,
-    options?: {
+  ): Promise<MergePopulate<D, P> | null>
+
+  function findByIdAndUpdate<P extends {} = {}>(
+    id: string | Types.ObjectId,
+    input: UpdateQuery<D>,
+    options: {
       message: string
       softDelete?: boolean
     }
@@ -503,6 +516,11 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
     }
   ): Promise<MergePopulate<D, P>>
 
+  function findOneAndUpdate<P extends {} = {}>(
+    query: FilterQuery<D>,
+    input: UpdateQuery<D>,
+  ): Promise<MergePopulate<D, P> | null>
+
   function findOneAndUpdate<P extends {} = []>(
     query: FilterQuery<D>,
     input: UpdateQuery<D>,
@@ -516,7 +534,7 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
   function findOneAndUpdate<P extends {} = []>(
     query: FilterQuery<D>,
     input: UpdateQuery<D>,
-    options?: {
+    options: {
       message: string
       softDelete?: boolean
     }
