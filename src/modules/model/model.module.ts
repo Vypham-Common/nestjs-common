@@ -1,6 +1,6 @@
 import { BadRequestException, DynamicModule, InternalServerErrorException, Module, Provider } from '@nestjs/common'
 import { SchemaFactory, getConnectionToken } from '@nestjs/mongoose'
-import { ClientSession, Connection, FilterQuery, HydratedDocument, MergeType, Model, PipelineStage, PopulateOptions, ProjectionType, QueryOptions, Schema, Types, UpdateQuery } from 'mongoose'
+import { ClientSession, Connection, Document, FilterQuery, HydratedDocument, IfAny, MergeType, Model, ModifyResult, PipelineStage, PopulateOptions, ProjectionType, QueryOptions, Require_id, Schema, Types, UpdateQuery } from 'mongoose'
 import { AbstractSchema } from '../../abstracts/AbstractSchema'
 import { getMethodFactoryToken, getMethodToken, getModelFactoryToken, getModelToken } from '../../decorators'
 import { TOKEN } from '../../enums'
@@ -88,7 +88,7 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
     projection,
     softDelete = true,
   }: MergeType<{ query?: FilterQuery<D> }, OptionalQueryOption>) {
-    const isSoftDelete = Model.isSoftDelete()
+    const isSoftDelete = Model?.isSoftDelete()
 
     if (isSoftDelete && softDelete) {
       query.deletedAt = { $exists: false }
@@ -209,7 +209,7 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
       softDelete?: boolean
     } = {}
   ) {
-    const isSoftDelete = Model.isSoftDelete()
+    const isSoftDelete = Model?.isSoftDelete()
     const query: FilterQuery<D> = { _id: id }
 
     if (isSoftDelete && softDelete) {
@@ -278,7 +278,7 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
       select?: string | string[] | Record<string, number | boolean | object>
     } = {}
   ) {
-    const isSoftDelete = Model.isSoftDelete()
+    const isSoftDelete = Model?.isSoftDelete()
     if (isSoftDelete && softDelete) {
       query.deletedAt = { $exists: false }
     }
@@ -299,7 +299,7 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
     options: { throwCase?: 'IF_EXISTS' | 'IF_NOT_EXISTS'; message?: string, softDelete?: boolean } = {}
   ) {
     const { throwCase, message, softDelete = true } = options || {}
-    const isSoftDelete = Model.isSoftDelete()
+    const isSoftDelete = Model?.isSoftDelete()
     if (isSoftDelete && softDelete) {
       query.deletedAt = { $exists: false }
     }
@@ -342,7 +342,7 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
       : { _id: { $in: ids } }
     const { throwCase, message, softDelete = true } = options || {}
 
-    const isSoftDelete = Model.isSoftDelete()
+    const isSoftDelete = Model?.isSoftDelete()
     if (isSoftDelete && softDelete && !query.deletedAt) {
       query.deletedAt = { $exists: false }
     }
@@ -472,7 +472,7 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
     } = {}
   ) {
     const query: FilterQuery<D> = { _id: id }
-    const isSoftDelete = Model.isSoftDelete()
+    const isSoftDelete = Model?.isSoftDelete()
     if (isSoftDelete && softDelete) {
       query.deletedAt = { $exists: false }
     }
@@ -546,7 +546,7 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
       softDelete?: boolean
     } = {}
   ) {
-    const isSoftDelete = Model.isSoftDelete()
+    const isSoftDelete = Model?.isSoftDelete()
     if (isSoftDelete && softDelete) {
       query.deletedAt = { $exists: false }
     }
@@ -566,9 +566,9 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
     id: string | Types.ObjectId,
     { isThrow, message, softDelete = true }: { isThrow?: boolean; message?: string, softDelete?: boolean } = {}
   ) {
-    const isSoftDelete = Model.isSoftDelete()
+    const isSoftDelete = Model?.isSoftDelete()
 
-    let data: HydratedDocument<D> | null = null
+    let data: HydratedDocument<D> | ModifyResult<IfAny<D, any, Document<unknown, {}, D> & Require_id<D>>> | null = null
 
     if (softDelete && isSoftDelete) {
       data = await Model.findByIdAndUpdate(id, { deletedAt: Date.now() }, { new: true })
@@ -588,9 +588,9 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
     query: FilterQuery<D>,
     { isThrow, message, softDelete }: { isThrow?: boolean; message?: string, softDelete?: boolean } = {}
   ) {
-    const isSoftDelete = Model.isSoftDelete()
+    const isSoftDelete = Model?.isSoftDelete()
 
-    let data: HydratedDocument<D> | null = null
+    let data: HydratedDocument<D> | ModifyResult<IfAny<D, any, Document<unknown, {}, D> & Require_id<D>>> | null = null
 
     if (softDelete && isSoftDelete) {
       data = await Model.findOneAndUpdate(query, { deletedAt: Date.now() }, { new: true })
