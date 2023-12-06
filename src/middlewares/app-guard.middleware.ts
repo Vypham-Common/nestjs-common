@@ -9,8 +9,8 @@ import { Request } from 'express'
 import { IS_PUBLIC_KEY } from '../decorators'
 
 @Injectable()
-export class AuthGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+export class AppGuard implements CanActivate {
+  constructor(private reflector: Reflector) { }
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest() as Request
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [

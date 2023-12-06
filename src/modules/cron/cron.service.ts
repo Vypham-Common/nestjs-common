@@ -6,13 +6,13 @@ import { CronJob } from 'cron'
 export class CronService {
   @Inject() private schedulerRegistry: SchedulerRegistry
 
-  registerTimeout(id: string, miliseconds: number, cb: () => any) {
-    const Timeout = setTimeout(cb, miliseconds)
+  registerTimeout(id: string, milliseconds: number, cb: () => any) {
+    const Timeout = setTimeout(cb, milliseconds)
     this.schedulerRegistry.addTimeout(id, Timeout)
   }
 
-  registerInterval(id: string, miliseconds: number, cb: () => any) {
-    const interval = setInterval(cb, miliseconds)
+  registerInterval(id: string, milliseconds: number, cb: () => any) {
+    const interval = setInterval(cb, milliseconds)
     this.schedulerRegistry.addInterval(id, interval)
   }
 
@@ -22,18 +22,18 @@ export class CronService {
     job.start()
   }
 
-  replaceTimeout(id: string, miliseconds: number, cb: () => any) {
+  replaceTimeout(id: string, milliseconds: number, cb: () => any) {
     if (this.schedulerRegistry.doesExist('timeout', id)) {
       this.schedulerRegistry.deleteTimeout(id)
     }
-    this.registerTimeout(id, miliseconds, cb)
+    this.registerTimeout(id, milliseconds, cb)
   }
 
-  replaceInterval(id: string, miliseconds: number, cb: () => any) {
+  replaceInterval(id: string, milliseconds: number, cb: () => any) {
     if (this.schedulerRegistry.doesExist('interval', id)) {
       this.schedulerRegistry.deleteInterval(id)
     }
-    this.registerInterval(id, miliseconds, cb)
+    this.registerInterval(id, milliseconds, cb)
   }
 
   replaceCron(id: string, timePattern: string, cb: () => any) {
@@ -48,15 +48,15 @@ export class CronService {
       switch (type) {
         case 'cron':
           this.schedulerRegistry.deleteCronJob(id)
-          break;
+          break
         case 'timeout':
           this.schedulerRegistry.deleteTimeout(id)
-          break;
+          break
         case 'interval':
           this.schedulerRegistry.deleteInterval(id)
-          break;
+          break
         default:
-          break;
+          break
       }
     }
   }

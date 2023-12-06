@@ -1,9 +1,10 @@
 import { DynamicModule, ForwardReference, Global, Inject, InjectionToken, Module, OptionalFactoryDependency, Provider, Type } from '@nestjs/common'
-import { APP_FILTER, APP_INTERCEPTOR, REQUEST } from '@nestjs/core'
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, REQUEST } from '@nestjs/core'
 import { InjectConnection } from '@nestjs/mongoose'
 import { Request } from 'express'
 import { Connection } from 'mongoose'
 import { TOKEN } from '../../enums'
+import { AppGuard } from '../../middlewares'
 import { AllExceptionsFilter, TransformResponse } from '../../utils'
 import { ConnectionModule } from '../connection/connection.module'
 import { ConnectionService } from '../connection/connection.service'
@@ -35,6 +36,11 @@ const provideMiddleware = [
   {
     provide: APP_INTERCEPTOR,
     useClass: TransformResponse,
+  },
+
+  {
+    provide: APP_GUARD,
+    useClass: AppGuard,
   },
 ]
 

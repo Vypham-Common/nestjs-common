@@ -25,10 +25,15 @@ export class WorkerService {
         }
       }
 
-      eventEmitter.on(`${tenant}_${collectionName}`, async (queue: Queue) => {
-        this.addQueue(tenant, collectionName, queue)
-      })
+    } else {
+      this.queueTenant[tenant][collectionName] = {
+        isRunning: false,
+        queue: []
+      }
     }
+    eventEmitter.on(`${tenant}_${collectionName}`, async (queue: Queue) => {
+      this.addQueue(tenant, collectionName, queue)
+    })
   }
 
   async addQueue(tenant: string, collectionName: string, queue: Queue) {
