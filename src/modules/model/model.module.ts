@@ -827,6 +827,8 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
   }
 }
 
+type Input = (new () => any) & { collectionName?: string, hook?: (schema: Schema<any>) => void, master?: boolean }
+
 export type Method<D extends AbstractSchema> = ReturnType<typeof methodFactory<D >>
 
 export type ModelFactory<D extends AbstractSchema> = (tenant?: string) => Model<D>
@@ -835,7 +837,7 @@ export type MethodFactory<D extends AbstractSchema> = (tenant?: string) => Metho
 @Module({})
 export class ModelModule {
   private static registerInput: {
-    [k: string]: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<any>) => void, master?: boolean, })
+    [k: string]: Input
   } = {}
 
   private static registerSchema<D extends AbstractSchema>(Decorator: new () => any, hook?: (schema: Schema<D>) => void) {
@@ -847,8 +849,8 @@ export class ModelModule {
     return Schema
   }
 
-  private static registerWithTenant<D extends AbstractSchema = AbstractSchema>(
-    input: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, }),
+  private static registerWithTenant(
+    input: Input,
     tenant: string | undefined = undefined,
     connection: Connection,
     connectionService: ConnectionService,
@@ -897,11 +899,11 @@ export class ModelModule {
     return Decorator.collectionName || Decorator.name
   }
 
-  static register<D extends AbstractSchema = any>(
-    regiserInput: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, })[],
+  static register(
+    registerInput: Input[],
   ): DynamicModule {
     const providers: Provider[] = []
-    regiserInput.forEach(input => {
+    registerInput.forEach(input => {
       const Schema = this.registerSchema(input, input.hook)
       const name = this.getName(input)
       this.registerInput[name] = input
@@ -920,7 +922,7 @@ export class ModelModule {
         },
         {
           provide: getMethodToken(name),
-          useFactory: (Model: Model<D> & ModelStatics, tenant?: string) => {
+          useFactory: (Model: Model<any> & ModelStatics, tenant?: string) => {
             return methodFactory(Model, name, tenant || global.GlobalConfig.MONGODB_NAME)
           },
           inject: injectMethod
@@ -934,11 +936,11 @@ export class ModelModule {
     }
   }
 
-  static registerWithoutRequest<D extends AbstractSchema = AbstractSchema>(
-    regiserInput: ((new () => any) & { collectionName?: string, hook?: (schema: Schema<D>) => void, master?: boolean, })[],
+  static registerWithoutRequest(
+    registerInput: Input[],
   ): DynamicModule {
     const providers: Provider[] = []
-    regiserInput.forEach(input => {
+    registerInput.forEach(input => {
       const Schema = this.registerSchema(input, input.hook)
       const name = this.getName(input)
       this.registerInput[name] = input
@@ -954,7 +956,7 @@ export class ModelModule {
         },
         {
           provide: getMethodFactoryToken(name),
-          useFactory: (modelFactory: (tenant?: string) => Model<D> & ModelStatics) => {
+          useFactory: (modelFactory: (tenant?: string) => Model<any> & ModelStatics) => {
             return function (tenant?: string) {
               const model = modelFactory(tenant)
               return methodFactory(model, name, tenant || global.GlobalConfig.MONGODB_NAME)
