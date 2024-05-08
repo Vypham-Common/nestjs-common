@@ -1,6 +1,6 @@
 import { config } from 'dotenv'
 import * as fs from 'fs'
-import { Document, Expression, FilterQuery, PipelineStage, Types } from 'mongoose'
+import { Document, Expression, FilterQuery, FlattenMaps, PipelineStage, Require_id, Types } from 'mongoose'
 import * as path from 'path'
 config({
   path: fs.existsSync(path.join(process.cwd(), '.env'))
@@ -61,6 +61,11 @@ declare global {
   > &
     IP
 
+  type DataId = string | number
+
+  type FacetPipelineStage = Exclude<PipelineStage, PipelineStage.CollStats | PipelineStage.Facet | PipelineStage.GeoNear | PipelineStage.IndexStats | PipelineStage.Out | PipelineStage.Merge | PipelineStage.PlanCacheStats>
+
+
   type RecursiveKeyOf<TObj> = {
     [TKey in keyof TObj & (string | number)]: TObj[TKey] extends
     | any[]
@@ -101,8 +106,11 @@ declare global {
 
   type ModelStatics = {
     isSoftDelete: () => boolean
+    isIncreasementId: () => boolean
+    getPartialSearch?: () => string[]
   }
 
+  type LeanDocument<D> = Require_id<FlattenMaps<D>>
 }
 global.GlobalConfig = envConfig
 global.tenants = []

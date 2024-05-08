@@ -25,20 +25,25 @@ export class WorkerService {
         }
       }
 
+      eventEmitter.on(`${tenant}_${collectionName}`, async (queue: Queue) => {
+        this.addQueue(tenant, collectionName, queue)
+      })
     } else {
-      this.queueTenant[tenant][collectionName] = {
-        isRunning: false,
-        queue: []
+      if (!this.queueTenant[tenant][collectionName]) {
+        this.queueTenant[tenant][collectionName] = {
+          isRunning: false,
+          queue: []
+        }
+        eventEmitter.on(`${tenant}_${collectionName}`, async (queue: Queue) => {
+          this.addQueue(tenant, collectionName, queue)
+        })
       }
     }
-    eventEmitter.on(`${tenant}_${collectionName}`, async (queue: Queue) => {
-      this.addQueue(tenant, collectionName, queue)
-    })
   }
 
   async addQueue(tenant: string, collectionName: string, queue: Queue) {
     this.queueTenant[tenant][collectionName].queue.push(queue)
-    if (!this.queueTenant[tenant].isRunning) {
+    if (!this.queueTenant[tenant][collectionName].isRunning) {
       this.start(tenant, collectionName)
     }
   }

@@ -65,13 +65,15 @@ export class GlobalModule {
 
     const providers: Provider[] = input?.providers || []
 
-    providers.push({
-      provide: 'INIT_INJECTION',
-      useFactory: async (...args: any[]) => {
-        return args
-      },
-      inject: input?.initInject || []
-    })
+    providers.push(
+      {
+        provide: 'INIT_INJECTION',
+        useFactory: async (...args: any[]) => {
+          return args
+        },
+        inject: input?.initInject || []
+      }
+    )
     return {
       module: GlobalModule,
       imports: input?.imports || [],

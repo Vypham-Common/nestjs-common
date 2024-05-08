@@ -1,6 +1,17 @@
 import { Schema, SchemaOptions } from '@nestjs/mongoose';
 
-export function NestSchema({ softDelete, ...rest }: SchemaOptions & { softDelete?: boolean } = { softDelete: false }) {
+export function NestSchema({
+  softDelete,
+  increasementId,
+  partialSearch,
+  ...rest
+}: SchemaOptions &
+  {
+    softDelete?: boolean
+    increasementId?: boolean
+    partialSearch?: string[]
+  } = { softDelete: false, increasementId: false, partialSearch: [] }
+) {
   return Schema({
     timestamps: true,
     toJSON: {
@@ -14,6 +25,8 @@ export function NestSchema({ softDelete, ...rest }: SchemaOptions & { softDelete
     id: false,
     statics: {
       isSoftDelete: () => softDelete,
+      isIncreasementId: () => increasementId,
+      getPartialSearch: () => partialSearch
     },
     ...rest
   })

@@ -1,7 +1,8 @@
-import { Types } from 'mongoose';
+
 export class AbstractSchema {
-  _id: Types.ObjectId
+  _id: DataId
   createdAt: Date
   updatedAt: Date
   deletedAt: Date
+  cloneOf: any
 }
