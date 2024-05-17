@@ -1,6 +1,6 @@
 import { DynamicModule, Module, Provider } from '@nestjs/common'
 import { SchemaFactory, getConnectionToken } from '@nestjs/mongoose'
-import { ClientSession, Connection, Model, PipelineStage, Schema } from 'mongoose'
+import { ClientSession, Connection, Model, PipelineStage, Schema, Types } from 'mongoose'
 import { AbstractSchema } from '../../abstracts/AbstractSchema'
 import { getMethodFactoryToken, getMethodToken, getModelFactoryToken, getModelToken } from '../../decorators'
 import { TOKEN } from '../../enums'
@@ -28,7 +28,14 @@ type Group = {
   }[]
 }
 
-const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & ModelStatics, name: string, tenant: string) {
+export type SchemaDefinition<D = any> = ((new () => any) & {
+  collectionName: string,
+  hook?: (schema: Schema<D>, tenant?: string) => void,
+  master?: boolean,
+  partialSearch?: string[]
+})
+
+const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & ModelStatics, name: string, tenant?: string) {
   name ??= Model.collection.name
 
   const createQueue = generateCreateQueue(Model, name, tenant)
@@ -210,7 +217,6 @@ const methodFactory = function <D extends AbstractSchema>(Model: Model<D> & Mode
   }
 }
 
-type Input = (new () => any) & { collectionName?: string, hook?: (schema: Schema<any>) => void, master?: boolean }
 
 export type Method<D extends AbstractSchema> = ReturnType<typeof methodFactory<D >>
 
@@ -220,25 +226,39 @@ export type MethodFactory<D extends AbstractSchema> = (tenant?: string) => Metho
 @Module({})
 export class ModelModule {
   private static registerInput: {
-    [k: string]: Input
+    [k: string]: SchemaDefinition
   } = {}
 
-  private static registerSchema<D extends AbstractSchema>(Decorator: new () => any, hook?: (schema: Schema<D>) => void) {
-    const Schema = SchemaFactory.createForClass(Decorator)
-    Schema.add({ deletedAt: Date })
-    if (hook) {
-      hook(Schema)
+  private static registerSchema<D extends AbstractSchema>(Decorator: SchemaDefinition<D>) {
+    const Schema = SchemaFactory.createForClass(Decorator) as Schema<any, any, any, any, any, ModelStatics>
+    const isSoftDelete = Schema.statics.isSoftDelete?.()
+    const isIncreasementId = Schema.statics.isIncreasementId?.()
+    if (isSoftDelete) {
+      Schema.add({ deletedAt: Date })
+      if (isIncreasementId) {
+        Schema.add({ cloneOf: Number })
+      } else {
+        Schema.add({ cloneOf: Types.ObjectId })
+      }
+    }
+
+    if (Decorator.hook) {
+      Decorator.hook(Schema)
+    }
+
+    if (isIncreasementId) {
+      Schema.add({ _id: Number })
     }
     return Schema
   }
 
   private static registerWithTenant(
-    input: Input,
+    input: SchemaDefinition,
     tenant: string | undefined = undefined,
     connection: Connection,
     connectionService: ConnectionService,
   ) {
-    const Schema = this.registerSchema(input, input.hook)
+    const Schema = this.registerSchema(input)
     const name = this.getName(input)
     this.createModelFactory(name, Schema)(connection, connectionService, tenant)
   }
@@ -247,6 +267,7 @@ export class ModelModule {
     Object.values(this.registerInput).forEach(input => {
       if (input.master) {
         ModelModule.registerWithTenant(input, undefined, connection, connectionService)
+        workerService.register('master', input.collectionName || input.name)
       } else {
         global.tenants.forEach((id) => {
           ModelModule.registerWithTenant(input, id, connection, connectionService)
@@ -283,11 +304,11 @@ export class ModelModule {
   }
 
   static register(
-    registerInput: Input[],
+    registerInput: SchemaDefinition[],
   ): DynamicModule {
     const providers: Provider[] = []
     registerInput.forEach(input => {
-      const Schema = this.registerSchema(input, input.hook)
+      const Schema = this.registerSchema(input)
       const name = this.getName(input)
       this.registerInput[name] = input
       const injectModel = [getConnectionToken(), ConnectionService,]
@@ -306,13 +327,14 @@ export class ModelModule {
         {
           provide: getMethodToken(name),
           useFactory: (Model: Model<any> & ModelStatics, tenant?: string) => {
-            return methodFactory(Model, name, tenant || global.GlobalConfig.MONGODB_NAME)
+            return methodFactory(Model, name, tenant)
           },
           inject: injectMethod
         }
       )
     })
     return {
+      imports: [ConnectionModule],
       module: ModelModule,
       providers: providers,
       exports: providers,
@@ -320,11 +342,11 @@ export class ModelModule {
   }
 
   static registerWithoutRequest(
-    registerInput: Input[],
+    registerInput: SchemaDefinition[],
   ): DynamicModule {
     const providers: Provider[] = []
     registerInput.forEach(input => {
-      const Schema = this.registerSchema(input, input.hook)
+      const Schema = this.registerSchema(input)
       const name = this.getName(input)
       this.registerInput[name] = input
       providers.push(
@@ -342,7 +364,7 @@ export class ModelModule {
           useFactory: (modelFactory: (tenant?: string) => Model<any> & ModelStatics) => {
             return function (tenant?: string) {
               const model = modelFactory(tenant)
-              return methodFactory(model, name, tenant || global.GlobalConfig.MONGODB_NAME)
+              return methodFactory(model, name, tenant)
             }
           },
           inject: [getModelFactoryToken(name)],
