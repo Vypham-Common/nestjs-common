@@ -1,13 +1,13 @@
-import { config } from 'dotenv'
-import * as fs from 'fs'
-import { Document, Expression, FilterQuery, FlattenMaps, PipelineStage, Require_id, Types } from 'mongoose'
-import * as path from 'path'
+/** @format */
+
+import { config } from "dotenv"
+import * as fs from "fs"
+import { Document, Expression, FilterQuery, FlattenMaps, PipelineStage, Require_id, Types } from "mongoose"
+import * as path from "path"
 config({
-  path: fs.existsSync(path.join(process.cwd(), '.env'))
-    ? path.join(process.cwd(), '.env')
-    : path.join(process.cwd(), '.env.example'),
+  path: fs.existsSync(path.join(process.cwd(), ".env")) ? path.join(process.cwd(), ".env") : path.join(process.cwd(), ".env.example"),
 })
-declare module 'express' {
+declare module "express" {
   export interface Request {
     tenant: string
     user: JWTPayload
@@ -17,10 +17,10 @@ declare module 'express' {
 }
 
 const envConfig = {
-  JWT_SECRET: process.env.JWT_SECRET || '',
-  HOST_URL: process.env.HOST_URL || '',
-  PUBLIC_KEY: process.env.PUBLIC_KEY || '',
-  MONGODB_NAME: process.env.MONGODB_NAME || '',
+  JWT_SECRET: process.env.JWT_SECRET || "",
+  HOST_URL: process.env.HOST_URL || "",
+  PUBLIC_KEY: process.env.PUBLIC_KEY || "",
+  MONGODB_NAME: process.env.MONGODB_NAME || "",
 }
 
 declare global {
@@ -49,33 +49,32 @@ declare global {
         _id: Types.ObjectId
       }
     > &
-    Omit<
-      I & {
-        _id: Types.ObjectId
-      } & Required<{
-        _id: Types.ObjectId
-      }>,
-      never
-    >,
+      Omit<
+        I & {
+          _id: Types.ObjectId
+        } & Required<{
+            _id: Types.ObjectId
+          }>,
+        never
+      >,
     keyof IP
   > &
     IP
 
   type DataId = string | number
 
-  type FacetPipelineStage = Exclude<PipelineStage, PipelineStage.CollStats | PipelineStage.Facet | PipelineStage.GeoNear | PipelineStage.IndexStats | PipelineStage.Out | PipelineStage.Merge | PipelineStage.PlanCacheStats>
-
+  type FacetPipelineStage = Exclude<
+    PipelineStage,
+    PipelineStage.CollStats | PipelineStage.Facet | PipelineStage.GeoNear | PipelineStage.IndexStats | PipelineStage.Out | PipelineStage.Merge | PipelineStage.PlanCacheStats
+  >
 
   type RecursiveKeyOf<TObj> = {
-    [TKey in keyof TObj & (string | number)]: TObj[TKey] extends
-    | any[]
-    | Types.ObjectId
-    ? `${TKey}`
-    : TObj[TKey] extends Types.ObjectId | string
-    ? `${TKey}` | `${TKey}.${RecursiveKeyOf<TObj[TKey]>}`
-    : `${TKey}`
+    [TKey in keyof TObj & (string | number)]: TObj[TKey] extends any[] | Types.ObjectId
+      ? `${TKey}`
+      : TObj[TKey] extends Types.ObjectId | string
+      ? `${TKey}` | `${TKey}.${RecursiveKeyOf<TObj[TKey]>}`
+      : `${TKey}`
   }[keyof TObj & (string | number)]
-
 
   type GeneratePipeline<T = any> = {
     from: string
@@ -85,23 +84,20 @@ declare global {
     lookup?: GeneratePipeline[]
     unwind?: boolean
     pipeline?: Exclude<PipelineStage, PipelineStage.Merge | PipelineStage.Out>[]
-    postPipeline?: Exclude<
-      PipelineStage,
-      PipelineStage.Merge | PipelineStage.Out
-    >[]
-    match?: FilterQuery<any>,
-    project?: NestedObjectSelect,
+    postPipeline?: Exclude<PipelineStage, PipelineStage.Merge | PipelineStage.Out>[]
+    match?: FilterQuery<any>
+    project?: NestedObjectSelect
     keepNull?: boolean
-    let?: PipelineStage.Lookup['$lookup']['let'],
-    sort?: Record<string, 1 | -1 | Expression.Meta>,
-    skip?: number,
+    let?: PipelineStage.Lookup["$lookup"]["let"]
+    sort?: Record<string, 1 | -1 | Expression.Meta>
+    skip?: number
     limit?: number
   }
 
   type GeneratePipelineWithOptions<T = any> = (query?: FilterQuery<any>, select?: NestedObjectSelect) => GeneratePipeline<T>
   interface Pagination {
-    page: null | number
-    limit: null | number
+    page: undefined | number
+    limit: undefined | number
   }
 
   type ModelStatics = {

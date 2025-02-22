@@ -1,6 +1,6 @@
 {
-  "name": "@vy-pham/nestjs-common",
-  "version": "3.0.0",
+  "name": "@vypham0209/nestjs-common",
+  "version": "3.0.4",
   "description": "Nestjs common function for my project",
   "main": "dist/index.js",
   "repository": {
@@ -12,11 +12,12 @@
     "prepublishOnly": "npm run build"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
+    "access": "public"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/graphql": "^13.0.3",
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/mongoose": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
